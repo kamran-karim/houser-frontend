@@ -1,0 +1,9 @@
+/venv
+/backend/__pycache__
+/frontend/__pycache__
+/frontend/node_modules
+/frontend/dist
+/frontend/build
+/backend/houser/migrations
+/backend/houser/static
+/backend/houser/media
