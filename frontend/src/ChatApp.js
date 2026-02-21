@@ -94,7 +94,7 @@ function ChatApp() {
     }));
 
     try {
-      const response = await fetch('http://localhost:8000/api/chat', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -139,6 +139,14 @@ function ChatApp() {
               else if (data.type === 'results') {
                 botResults = data.results;
                 setMessages(prev => prev.map(m => m.id === tempId ? { ...m, results: botResults } : m));
+              }
+              else if (data.type === 'search_stats') {
+                // attach stats to the temp bot message for non-intrusive display
+                setMessages(prev => prev.map(m => m.id === tempId ? { ...m, stats: data.stats, statsSummary: data.summary } : m));
+              }
+              else if (data.type === 'key_highlights') {
+                // structured highlights for quick display
+                setMessages(prev => prev.map(m => m.id === tempId ? { ...m, keyHighlights: data.highlights } : m));
               }
               else if (data.type === 'text_chunk') {
                 botContent += data.content;
@@ -187,7 +195,7 @@ function ChatApp() {
   const handleNewChat = async () => {
     try {
       // Clear server-side cache
-      await fetch('http://localhost:8000/api/clear-cache', { method: 'POST' });
+      await fetch(`${process.env.REACT_APP_API_URL}/api/clear-cache`, { method: 'POST' });
     } catch (err) {
       console.error('Failed to clear server cache:', err);
     }
@@ -208,6 +216,110 @@ function ChatApp() {
       e.preventDefault();
       sendMessage();
     }
+  };
+
+  const renderBotContent = (msg) => {
+    if (!msg.content) return null;
+
+    // If the AI returned a numbered list or multiple price entries, render as bullets
+    const hasNumbered = /\d+\./.test(msg.content);
+    const priceMatches = (msg.content.match(/AED\s?[0-9,]+/gi) || []);
+    if (msg.results && (hasNumbered || priceMatches.length >= 2)) {
+      // split on numbered markers OR before each AED price
+      const rawParts = msg.content.split(/(?=\d+\.\s*)|(?=AED\s?[0-9,]+)/i);
+      const parts = rawParts.map(p => p.replace(/^\d+\.\s*/,'').trim()).filter(p => p.length > 0);
+      return (
+        <div className="bot-list">
+          <ul>
+            {parts.map((p, i) => (
+              <li key={i} dangerouslySetInnerHTML={{ __html: p.replace(/\*\*/g, '') }} />
+            ))}
+          </ul>
+        </div>
+      );
+    }
+
+    // fallback: plain paragraph
+    return <p>{msg.content}</p>;
+  };
+
+  const formatAED = (n) => {
+    if (n === null || n === undefined || n === '') return 'AED N/A';
+    // If it's already a number
+    if (typeof n === 'number') return `AED ${Math.round(n).toLocaleString()}`;
+    // If it's a string like 'AED 170,000' or '170,000', strip non-numeric chars
+    const cleaned = String(n).replace(/[^0-9.\-]+/g, '');
+    const num = cleaned === '' ? NaN : Number(cleaned);
+    if (isNaN(num)) return 'AED N/A';
+    return `AED ${Math.round(num).toLocaleString()}`;
+  };
+
+  const extractFeatures = (p) => {
+    // Prefer explicit key_features field
+    if (p.key_features) {
+      if (Array.isArray(p.key_features)) return p.key_features.slice(0,2);
+      if (typeof p.key_features === 'string') return p.key_features.split(/[,;|\/]+/).map(s=>s.trim()).filter(Boolean).slice(0,2);
+    }
+    // Fallback: take first two comma-separated phrases from description
+    if (p.description) {
+      const parts = p.description.split(/[\.\n]+/)[0].split(/[,;|]+/).map(s=>s.trim()).filter(Boolean);
+      return parts.slice(0,2);
+    }
+    return [];
+  };
+
+  const renderStructuredResponse = (msg) => {
+    const results = msg.results || [];
+    if (!results || results.length === 0) return null;
+
+    // 1) Retrieved Listings (Summary)
+    const bullets = results.map((r) => {
+      const title = r.title || r.property_name || 'Untitled';
+      const location = r.location || r.area || r.city || 'Unknown Location';
+      const price = formatAED(r.price);
+      const beds = (r.beds === 'Studio' || String(r.beds).toLowerCase() === 'studio') ? 'Studio' : `${r.beds || r.bedrooms || 'N/A'}BR`;
+      const feats = extractFeatures(r).slice(0,2);
+      const featText = feats.length ? ` – ${feats.join(', ')}` : '';
+      return `${title} – ${location} – ${price} – ${beds}${featText}`;
+    });
+
+    // 2) Key Highlights: use msg.keyHighlights if provided, else compute
+    let highlights = msg.keyHighlights;
+    if (!highlights) {
+      const prices = results.map(r=> Number(r.price) || 0).filter(v=>v>0);
+      const count = results.length;
+      const avg = prices.length ? Math.round(prices.reduce((a,b)=>a+b,0)/prices.length) : 0;
+      const low = prices.length ? Math.min(...prices) : 0;
+      const high = prices.length ? Math.max(...prices) : 0;
+      highlights = {
+        count,
+        avg_price: avg,
+        lowest_price: low,
+        highest_price: high
+      };
+    }
+
+    return (
+      <div>
+        <div className="retrieved-summary">
+          <h4>Retrieved Listings (Summary)</h4>
+          <ul>
+            {bullets.map((b, i) => (
+              <li key={i}>{b}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="compact-highlights">
+          <h4>Key Highlights</h4>
+          <div>
+            Listings: {highlights.count}  <br/>
+            Average Price: {formatAED(highlights.avg_price)}  <br/>
+            Price Range: {formatAED(highlights.lowest_price)} – {formatAED(highlights.highest_price)}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const suggestedQueries = [
@@ -261,7 +373,13 @@ function ChatApp() {
             <div key={idx} className={`message-row ${msg.type === 'bot' ? 'bot-row' : 'user-row'}`}>
               {msg.type === 'bot' && <div className="bot-avatar">💎</div>}
               <div className="chat-bubble">
-                <p>{msg.content}</p>
+                {(msg.results && msg.results.length > 0) ? (
+                  renderStructuredResponse(msg)
+                ) : (
+                  renderBotContent(msg)
+                )}
+
+                
 
                 {msg.results && msg.results.length > 0 && (
                   <div className="properties-grid">
@@ -354,6 +472,7 @@ function ChatApp() {
                     </div>
                   </div>
                 )}
+                
               </div>
             </div>
           ))}

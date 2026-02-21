@@ -27,7 +27,7 @@ function App() {
 
   useEffect(() => {
     // Greet on load
-    fetch('http://localhost:8000/api/hello?q=hello')
+    fetch(`${process.env.REACT_APP_API_URL}/api/hello?q=hello`)
       .then(r => r.json())
       .then(data => setGreeting(data.message))
       .catch(() => setGreeting('Welcome to Houser'));
@@ -42,7 +42,7 @@ function App() {
     setShowStats(false);
 
     try {
-      const response = await fetch('http://localhost:8000/api/search', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -80,7 +80,7 @@ function App() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:8000/api/stats', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

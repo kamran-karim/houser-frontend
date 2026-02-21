@@ -124,8 +124,9 @@ def chat_stream_generator(user_message, session_context, cache_key):
         yield f'data: {json.dumps({"response": ai_output.get("response"), "type": "error"})}\n\n'
         return
 
-    # Yield the initial greeting/response from the AI while we fetch data
-    if ai_output.get('response'):
+    # Yield the initial greeting/response from the AI for non-search intents only
+    # (Search intents produce a plan internally; we avoid exposing that planning sentence to clients.)
+    if ai_output.get('response') and intent_type in ['info', 'clarification', 'stats']:
         yield f'data: {json.dumps({"type": "text_chunk", "content": ai_output["response"] + " "})}\n\n'
 
     if intent_type in ['info', 'clarification']:
@@ -168,8 +169,69 @@ def chat_stream_generator(user_message, session_context, cache_key):
     try:
         db_data = db_future.result(timeout=7)
         results = db_data['results']
-        
-        # 3. PUSH RESULTS IMMEDIATELY
+
+        # 3. COMPUTE AND PUSH A STRUCTURED STATS BLOCK (clean, organized)
+        try:
+            primary = search_plan.get('primary', {})
+            area_name = primary.get('area') or primary.get('city') or 'Selection'
+            results_stats = calculate_results_stats(results, area_name=area_name)
+        except Exception:
+            results_stats = None
+
+        if results_stats:
+            stats_chunk = {
+                "type": "search_stats",
+                "stats": results_stats,
+                "summary": f"{results_stats['counts']['total']} listings — Avg: AED {int(results_stats['prices']['avg']):,}"
+            }
+            yield f'data: {json.dumps(stats_chunk)}\n\n'
+
+        # 3.b Generate concise key highlights for quick client display
+        try:
+            count = len(results)
+            prices = [r.get('price', 0) for r in results if r.get('price')]
+            avg_price = int(results_stats['prices']['avg']) if results_stats and results_stats.get('prices') else (int(sum(prices)/len(prices)) if prices else 0)
+            lowest = int(min(prices)) if prices else 0
+            highest = int(max(prices)) if prices else 0
+
+            # Best deals: prefer explicit priceInsight mentions, else lowest priced
+            best_deals = [r for r in results if r.get('priceInsight')]
+            if not best_deals:
+                best_deals = sorted(results, key=lambda x: x.get('price', float('inf')))[:3]
+            else:
+                best_deals = sorted(best_deals, key=lambda x: x.get('price', float('inf')))[:3]
+
+            top_areas = {}
+            for r in results:
+                a = r.get('area') or r.get('location') or 'Unknown'
+                top_areas[a] = top_areas.get(a, 0) + 1
+            top_areas_list = sorted([{"area": k, "count": v} for k, v in top_areas.items()], key=lambda x: x['count'], reverse=True)[:3]
+
+            highlights_list = []
+            for bd in best_deals:
+                highlights_list.append({
+                    "title": bd.get('title'),
+                    "price": f"AED {int(bd.get('price',0)):,}",
+                    "beds": bd.get('beds'),
+                    "location": bd.get('location')
+                })
+
+            key_highlights = {
+                "type": "key_highlights",
+                "highlights": {
+                    "count": count,
+                    "avg_price": f"AED {avg_price:,}",
+                    "lowest_price": f"AED {lowest:,}",
+                    "highest_price": f"AED {highest:,}",
+                    "best_deals": highlights_list,
+                    "top_areas": top_areas_list
+                }
+            }
+            yield f'data: {json.dumps(key_highlights)}\n\n'
+        except Exception:
+            pass
+
+        # 4. PUSH RESULTS
         yield f'data: {json.dumps({"type": "results", "results": results, "isFallback": db_data["isFallback"]})}\n\n'
         
         # 4. STREAM ADVISORY NARRATIVE

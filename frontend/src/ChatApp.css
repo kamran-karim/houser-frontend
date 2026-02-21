@@ -399,6 +399,48 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* Key Highlights Card */
+.key-highlights-card {
+  margin-top: 1.25rem;
+  background: linear-gradient(180deg, #ffffff, #fbffff);
+  border: 1px solid var(--border);
+  padding: 1rem;
+  border-radius: 14px;
+}
+.key-highlights-card h4 {
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+.highlights-summary {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.highlights-summary .hl-count, .highlights-summary .hl-avg, .highlights-summary .hl-range {
+  background: #f8fafc;
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  font-weight: 700;
+}
+.highlights-deals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.hl-deal {
+  padding: 0.6rem;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
+.hl-deal-title { font-weight: 700; margin-bottom: 0.25rem; }
+.hl-deal-meta { color: var(--text-muted); font-size: 0.85rem; }
+.highlights-areas { margin-top: 0.5rem; }
+.area-chip { display: inline-block; margin-right: 0.5rem; padding: 0.35rem 0.6rem; background: #f1f5f9; border-radius: 999px; font-weight: 600; font-size: 0.85rem; }
+
 .table-price {
   color: var(--accent);
   font-weight: 800;
