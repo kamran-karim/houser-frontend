@@ -1,3 +1,5 @@
+/* eslint-disable no-loop-func */
+
 import React, { useState, useEffect, useRef } from 'react';
 import './ChatApp.css';
 
@@ -94,7 +96,7 @@ function ChatApp() {
     }));
 
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat`, {
+      const response = await fetch('http://localhost:8000/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -195,7 +197,7 @@ function ChatApp() {
   const handleNewChat = async () => {
     try {
       // Clear server-side cache
-      await fetch(`${process.env.REACT_APP_API_URL}/api/clear-cache`, { method: 'POST' });
+      await fetch('http://localhost:8000/api/clear-cache', { method: 'POST' });
     } catch (err) {
       console.error('Failed to clear server cache:', err);
     }
@@ -227,14 +229,13 @@ function ChatApp() {
     if (msg.results && (hasNumbered || priceMatches.length >= 2)) {
       // split on numbered markers OR before each AED price
       const rawParts = msg.content.split(/(?=\d+\.\s*)|(?=AED\s?[0-9,]+)/i);
-      const parts = rawParts.map(p => p.replace(/^\d+\.\s*/, '').trim()).filter(p => p.length > 0);
+      const parts = rawParts.map(p => p.replace(/^\d+\.\s*/,'').trim()).filter(p => p.length > 0);
       return (
         <div className="bot-list">
           <ul>
-            {parts.map((p, i) => {
-              const cleanedContent = p.replace(/\*\*/g, '');
-              return <li key={i} dangerouslySetInnerHTML={{ __html: cleanedContent }} />;
-            })}
+            {parts.map((p, i) => (
+              <li key={i} dangerouslySetInnerHTML={{ __html: p.replace(/\*\*/g, '') }} />
+            ))}
           </ul>
         </div>
       );
@@ -249,7 +250,7 @@ function ChatApp() {
     // If it's already a number
     if (typeof n === 'number') return `AED ${Math.round(n).toLocaleString()}`;
     // If it's a string like 'AED 170,000' or '170,000', strip non-numeric chars
-    const cleaned = String(n).replace(/[^0-9.-]+/g, '');
+    const cleaned = String(n).replace(/[^0-9.\-]+/g, '');
     const num = cleaned === '' ? NaN : Number(cleaned);
     if (isNaN(num)) return 'AED N/A';
     return `AED ${Math.round(num).toLocaleString()}`;
@@ -258,15 +259,13 @@ function ChatApp() {
   const extractFeatures = (p) => {
     // Prefer explicit key_features field
     if (p.key_features) {
-      if (Array.isArray(p.key_features)) return p.key_features.slice(0, 2);
-      if (typeof p.key_features === 'string') {
-        return p.key_features.split(/[,;|/]+/).map(s => s.trim()).filter(Boolean).slice(0, 2);
-      }
+      if (Array.isArray(p.key_features)) return p.key_features.slice(0,2);
+      if (typeof p.key_features === 'string') return p.key_features.split(/[,;|\/]+/).map(s=>s.trim()).filter(Boolean).slice(0,2);
     }
     // Fallback: take first two comma-separated phrases from description
     if (p.description) {
-      const parts = p.description.split(/[.\n]+/)[0].split(/[,;|]+/).map(s => s.trim()).filter(Boolean);
-      return parts.slice(0, 2);
+      const parts = p.description.split(/[\.\n]+/)[0].split(/[,;|]+/).map(s=>s.trim()).filter(Boolean);
+      return parts.slice(0,2);
     }
     return [];
   };
